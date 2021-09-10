@@ -1,0 +1,12 @@
+# Python
+venv/
+.coverage
+__pycache__/
+*.py[cod]
+
+# Charm
+build/
+*.charm
+
+# IDE
+.vscode
