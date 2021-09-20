@@ -14,7 +14,7 @@ develop a new k8s charm using the Operator Framework:
 
 import logging
 
-from ops.charm import CharmBase
+from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent, PebbleReadyEvent, RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus
@@ -29,46 +29,33 @@ class CharmK8SKubeBurnerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.framework.observe(self.on.httpbin_pebble_ready, self._on_httpbin_pebble_ready)
+        self.framework.observe(self.on.kube_burner_pebble_ready, self._on_kube_burner_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.fortune_action, self._on_fortune_action)
-        self._stored.set_default(things=[])
-
-    def _on_httpbin_pebble_ready(self, event):
-        """Define and start a workload using the Pebble API.
-
-        TEMPLATE-TODO: change this example to suit your needs.
-        You'll need to specify the right entrypoint and environment
-        configuration for your specific workload. Tip: you can see the
-        standard entrypoint of an existing container using docker inspect
-
-        Learn more about Pebble layers at https://github.com/canonical/pebble
-        """
+        
+    def _on_kube_burner_pebble_ready(self, event: PebbleReadyEvent):
+        """Define and start a workload using the Pebble API."""
         # Get a reference the container attribute on the PebbleReadyEvent
         container = event.workload
         # Define an initial Pebble layer configuration
-        pebble_layer = {
-            "summary": "httpbin layer",
-            "description": "pebble config layer for httpbin",
+        kube_burner_layer = {
+            "summary": "kube-burner layer",
+            "description": "pebble config layer for kube-burner",
             "services": {
-                "httpbin": {
+                "kube-burner": {
                     "override": "replace",
-                    "summary": "httpbin",
-                    "command": "gunicorn -b 0.0.0.0:80 httpbin:app -k gevent",
-                    "startup": "enabled",
+                    "summary": "kube-burner",
+                    "command": "/bin/kube-burner",
+                    "startup": "disabled",
                     "environment": {"thing": self.model.config["thing"]},
                 }
             },
         }
         # Add intial Pebble config layer using the Pebble API
-        container.add_layer("httpbin", pebble_layer, combine=True)
-        # Autostart any services that were defined with startup: enabled
-        container.autostart()
-        # Learn more about statuses in the SDK docs:
-        # https://juju.is/docs/sdk/constructs#heading--statuses
+        container.add_layer("kube-burner", kube_burner_layer, combine=True)
         self.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, _):
+    def _on_config_changed(self, event: ConfigChangedEvent):
         """Just an example to show how to deal with changed configuration.
 
         TEMPLATE-TODO: change this example to suit your needs.
@@ -83,7 +70,7 @@ class CharmK8SKubeBurnerCharm(CharmBase):
             logger.debug("found a new thing: %r", current)
             self._stored.things.append(current)
 
-    def _on_fortune_action(self, event):
+    def _on_fortune_action(self, event: ActionEvent):
         """Just an example to show how to receive actions.
 
         TEMPLATE-TODO: change this example to suit your needs.

@@ -2,11 +2,41 @@
 
 ## Developing
 
+Requires
+- Python
+- Charmcraft
+- LXD
+- Juju
+- Kubernetes
+
+Deploy benchmark charmed kubernetes target
+
+```
+juju deploy charmed-kubernetes --overlay .juju/overlays/k8s-lma-overlay.yaml --debug
+```
+
 Create and activate a virtualenv with the development requirements:
 
-    virtualenv -p python3 venv
-    source venv/bin/activate
-    pip install -r requirements-dev.txt
+```
+virtualenv -p python3 venv
+source venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+Deploy charm on an existing k8s juju model
+
+```
+charmcraft pack
+juju deploy ./charm-k8s-kube-burner_ubuntu-20.04-amd64.charm --resource kube-burner-image=quay.io/cloud-bulldozer/kube-burner:latest
+```
+
+### Useful commands
+
+Kubernetes
+```
+kubectl logs charm-k8s-kube-burner-0/charm --all-containers
+```
+
 
 ## Code overview
 
