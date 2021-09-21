@@ -34,9 +34,32 @@ juju deploy ./charm-k8s-kube-burner_ubuntu-20.04-amd64.charm --resource kube-bur
 
 Kubernetes
 ```
-kubectl logs charm-k8s-kube-burner-0/charm --all-containers
+# Switch namespace
+kubectl config set-context --current --namespace=<namespace>
+
+# Get logs
+kubectl logs charm-k8s-kube-burner-0 --all-containers
+
+# List containers of a pod
+kubectl get pods charm-k8s-kube-burner-0 -o jsonpath='{.spec.containers[*].name}'
+
+# Get a shell of the charm workload container
+kubectl exec charm-k8s-kube-burner-0 --container kube-burner --stdin --tty -- /bin/bash
+
+kubectl cp /usr/bin/nano charm-k8s-kube-burner/0:/usr/bin/nano --container kube-burner
 ```
 
+Charm development
+```
+# Send nano to charm agent container
+juju scp /usr/bin/nano charm-k8s-kube-burner/0:/usr/bin/nano
+
+# Get a shell of the charm agent
+juju ssh charm-k8s-kube-burner/0
+
+# Edit code inside of charm agent 
+nano /var/lib/juju/agents/unit-charm-k8s-kube-burner-0/charm/src/charm.py
+```
 
 ## Code overview
 
