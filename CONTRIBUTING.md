@@ -46,7 +46,7 @@ kubectl get pods charm-k8s-kube-burner-0 -o jsonpath='{.spec.containers[*].name}
 # Get a shell of the charm workload container
 kubectl exec charm-k8s-kube-burner-0 --container kube-burner --stdin --tty -- /bin/bash
 
-kubectl cp /usr/bin/nano charm-k8s-kube-burner/0:/usr/bin/nano --container kube-burner
+kubectl cp /usr/bin/nano charm-k8s-kube-burner-0:/usr/bin/nano --container kube-burner
 ```
 
 Charm development
@@ -60,6 +60,14 @@ juju ssh charm-k8s-kube-burner/0
 # Edit code inside of charm agent 
 nano /var/lib/juju/agents/unit-charm-k8s-kube-burner-0/charm/src/charm.py
 ```
+### Other references
+
+Charm SDK
+- [Docs](https://juju.is/docs/sdk)
+- [Code](https://github.com/canonical/operator.git)
+
+Pebble
+- [Code](https://github.com/canonical/pebble)
 
 ## Code overview
 
