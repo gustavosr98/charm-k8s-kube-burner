@@ -12,12 +12,20 @@ develop a new k8s charm using the Operator Framework:
     https://discourse.charmhub.io/t/4208
 """
 
+from ops.model import ActiveStatus
+from ops.main import main
+from ops.framework import StoredState
+from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent, PebbleReadyEvent, RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
 import logging
 
-from ops.charm import ActionEvent, CharmBase, ConfigChangedEvent, PebbleReadyEvent, RelationBrokenEvent, RelationChangedEvent, RelationCreatedEvent
-from ops.framework import StoredState
-from ops.main import main
-from ops.model import ActiveStatus
+KUBECONFIG_PATH = "/root/.kube/config"
+
+KUBE_BURNER_INIT_SERVICE_WRAPPER = "/bin/kube-burner-service-wrapper"
+
+KUBE_BURNER_FOLDER = "/root/kube-burner"
+WORKLOADS_FOLDER = KUBE_BURNER_FOLDER + "/workloads"
+TARGET_CONFIG = "target-config"
+
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +37,11 @@ class CharmK8SKubeBurnerCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.framework.observe(self.on.kube_burner_pebble_ready, self._on_kube_burner_pebble_ready)
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.fortune_action, self._on_fortune_action)
-        
+        self.framework.observe(
+            self.on.kube_burner_pebble_ready, self._on_kube_burner_pebble_ready)
+        self.framework.observe(self.on.check_alerts_action,
+                               self._on_check_alerts_action)
+
     def _on_kube_burner_pebble_ready(self, event: PebbleReadyEvent):
         """Define and start a workload using the Pebble API."""
         # Get a reference the container attribute on the PebbleReadyEvent
@@ -40,51 +49,76 @@ class CharmK8SKubeBurnerCharm(CharmBase):
         # Define an initial Pebble layer configuration
         kube_burner_layer = {
             "summary": "kube-burner layer",
-            "description": "pebble config layer for kube-burner",
+            "description": "Pebble config layer for kube-burner",
             "services": {
-                "kube-burner": {
+                "sleep": {
                     "override": "replace",
-                    "summary": "kube-burner",
-                    "command": "/bin/kube-burner",
+                    "summary": "Linux sleep to allow kube-burner CLI to be a service",
+                    "command": "/usr/bin/sleep infinity",
+                    "startup": "enabled",
+                },
+                "kube-burner.init": {
+                    "override": "replace",
+                    "summary": "Launch benchmark",
+                    "command": f'{KUBE_BURNER_INIT_SERVICE_WRAPPER}',
                     "startup": "disabled",
-                    "environment": {"thing": self.model.config["thing"]},
                 }
             },
         }
+        kube_burner_init_service_wrapper = """
+            #!/bin/bash
+            /bin/kube-burner init -c /root/kube-burner/workloads/target-config/target-config.yml
+            /usr/bin/sleep infinity
+        """
+
         # Add intial Pebble config layer using the Pebble API
         container.add_layer("kube-burner", kube_burner_layer, combine=True)
+        container.push(
+            KUBE_BURNER_INIT_SERVICE_WRAPPER, kube_burner_init_service_wrapper,
+            make_dirs=True
+        )
+        container.autostart()
         self.unit.status = ActiveStatus()
 
-    def _on_config_changed(self, event: ConfigChangedEvent):
-        """Just an example to show how to deal with changed configuration.
+    def _on_check_alerts_action(self, event: ActionEvent):
+        """Launch benchmark."""
+        logger.info("run-action: init")
 
-        TEMPLATE-TODO: change this example to suit your needs.
-        If you don't need to handle config, you can remove this method,
-        the hook created in __init__.py for it, the corresponding test,
-        and the config.py file.
+        try:
+            kube_burner_config = event.params["kube-burner-config"]
+            self._clear_kube_burner_target_config()
+            self._set_kube_burner_target_config(kube_burner_config)
 
-        Learn more about config at https://juju.is/docs/sdk/config
-        """
-        current = self.config["thing"]
-        if current not in self._stored.things:
-            logger.debug("found a new thing: %r", current)
-            self._stored.things.append(current)
+            container = self.unit.get_container('kube-burner')
+            if container.get_service("kube-burner.init").is_running():
+                container.start("kube-burner.init")
 
-    def _on_fortune_action(self, event: ActionEvent):
-        """Just an example to show how to receive actions.
+        except Exception as e:
+            event.fail(e)
 
-        TEMPLATE-TODO: change this example to suit your needs.
-        If you don't need to handle actions, you can remove this method,
-        the hook created in __init__.py for it, the corresponding test,
-        and the actions.py file.
+    def _clear_kube_burner_target_config(self) -> None:
+        logger.debug("_clean_kube_burner_target_config()")
 
-        Learn more about actions at https://juju.is/docs/sdk/actions
-        """
-        fail = event.params["fail"]
-        if fail:
-            event.fail(fail)
-        else:
-            event.set_results({"fortune": "A bug in the code is worth two in the documentation."})
+        container = self.unit.get_container('kube-burner')
+        try:
+            container.remove_path(
+                f'{WORKLOADS_FOLDER}/{TARGET_CONFIG}/', recursive=True)
+        except:
+            pass
+
+    def _set_kube_burner_target_config(self, kube_burner_config) -> None:
+        logger.debug("_set_kube_burner_target_config()")
+
+        container = self.unit.get_container('kube-burner')
+        container.push(
+            f'{WORKLOADS_FOLDER}/{TARGET_CONFIG}/{TARGET_CONFIG}.yml',
+            kube_burner_config["content"], make_dirs=True
+        )
+        for template in kube_burner_config["templates"]:
+            container.push(
+                f'{WORKLOADS_FOLDER}/{TARGET_CONFIG}/templates/{template["objectTemplate"].split("/")[-1:][0]}',
+                template["content"], make_dirs=True
+            )
 
 
 if __name__ == "__main__":
